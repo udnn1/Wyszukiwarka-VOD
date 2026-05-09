@@ -87,8 +87,6 @@ TMDB_BEARER_TOKEN
 TMDB_V3_API_KEY
 ```
 
-Nie umieszczaj prywatnych kluczy API bezpośrednio w plikach śledzonych przez git.
-
 ## Opcjonalny most Scrapling
 
 Most Scrapling uruchamia skrypt Python z poziomu PHP i pomaga pobierać dane z serwisów, które wymagają dokładniejszego parsowania HTML.
