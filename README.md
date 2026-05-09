@@ -73,6 +73,7 @@ Projekt korzysta z TMDB API. Utwórz lokalny plik `tmdb-auth.json` w katalogu pr
   "bearer": "twoj_token_bearer",
   "apiKey": "twoj_klucz_api"
 }
+```
 
 ```bash
 TMDB_API_BEARER_TOKEN=twoj_token_bearer
