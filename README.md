@@ -73,11 +73,6 @@ Projekt korzysta z TMDB API. Utwórz lokalny plik `tmdb-auth.json` w katalogu pr
   "bearer": "twoj_token_bearer",
   "apiKey": "twoj_klucz_api"
 }
-```
-
-Plik `tmdb-auth.json` jest wpisany do `.gitignore`, więc nie powinien trafić do repozytorium.
-
-Opcjonalnie dane dostępowe można przekazać przez zmienne środowiskowe. Mają one pierwszeństwo przed wartościami z pliku `tmdb-auth.json`:
 
 ```bash
 TMDB_API_BEARER_TOKEN=twoj_token_bearer
