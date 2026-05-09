@@ -66,7 +66,18 @@ http://localhost:8000
 
 ## Konfiguracja TMDB
 
-Projekt korzysta z TMDB API. Dane dostępowe najlepiej przekazać przez zmienne środowiskowe:
+Projekt korzysta z TMDB API. Utwórz lokalny plik `tmdb-auth.json` w katalogu projektu:
+
+```json
+{
+  "bearer": "twoj_token_bearer",
+  "apiKey": "twoj_klucz_api"
+}
+```
+
+Plik `tmdb-auth.json` jest wpisany do `.gitignore`, więc nie powinien trafić do repozytorium.
+
+Opcjonalnie dane dostępowe można przekazać przez zmienne środowiskowe. Mają one pierwszeństwo przed wartościami z pliku `tmdb-auth.json`:
 
 ```bash
 TMDB_API_BEARER_TOKEN=twoj_token_bearer
@@ -80,7 +91,7 @@ TMDB_BEARER_TOKEN
 TMDB_V3_API_KEY
 ```
 
-Nie umieszczaj prywatnych kluczy API bezpośrednio w publicznym repozytorium.
+Nie umieszczaj prywatnych kluczy API bezpośrednio w plikach śledzonych przez git.
 
 ## Opcjonalny most Scrapling
 

@@ -59,6 +59,64 @@ function serverValue(string $key): string
     return is_string($value) ? trim($value) : '';
 }
 
+function configString(array $config, array $keys): string
+{
+    foreach ($keys as $key) {
+        $value = $config[$key] ?? '';
+
+        if (!is_string($value)) {
+            continue;
+        }
+
+        $value = trim($value);
+
+        if ($value !== '') {
+            return $value;
+        }
+    }
+
+    return '';
+}
+
+function tmdbAuthFileCredentials(): array
+{
+    $authPath = __DIR__ . '/tmdb-auth.json';
+
+    if (!is_file($authPath)) {
+        return [
+            'bearer' => '',
+            'apiKey' => '',
+        ];
+    }
+
+    $rawConfig = file_get_contents($authPath);
+
+    if ($rawConfig === false) {
+        jsonResponse(500, ['error' => 'Nie udalo sie odczytac pliku tmdb-auth.json.']);
+    }
+
+    $config = json_decode($rawConfig, true);
+
+    if (!is_array($config)) {
+        jsonResponse(500, ['error' => 'Nieprawidlowy plik tmdb-auth.json: ' . json_last_error_msg()]);
+    }
+
+    return [
+        'bearer' => configString($config, [
+            'bearer',
+            'bearerToken',
+            'TMDB_API_BEARER_TOKEN',
+            'TMDB_BEARER_TOKEN',
+        ]),
+        'apiKey' => configString($config, [
+            'apiKey',
+            'api_key',
+            'TMDB_API_KEY',
+            'TMDB_V3_API_KEY',
+        ]),
+    ];
+}
+
 function tmdbCredentials(): array
 {
     $bearerToken = serverValue('TMDB_API_BEARER_TOKEN');
@@ -71,12 +129,14 @@ function tmdbCredentials(): array
         $apiKey = serverValue('TMDB_V3_API_KEY');
     }
 
+    $authFileCredentials = tmdbAuthFileCredentials();
+
     if ($bearerToken === '') {
-        $bearerToken = 'XXX';
+        $bearerToken = $authFileCredentials['bearer'];
     }
 
     if ($apiKey === '') {
-        $apiKey = 'XXX';
+        $apiKey = $authFileCredentials['apiKey'];
     }
 
     return [
