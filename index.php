@@ -3057,9 +3057,7 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
       ]);
       const title = mediaTitle(item);
       const year = mediaYear(item);
-      const filmwebUrl = providers && providers.source === "filmweb" && providers.link
-        ? providers.link
-        : exactFilmwebUrl;
+      const filmwebUrl = exactFilmwebUrl;
 
       return {
         mediaType: item.media_type,
