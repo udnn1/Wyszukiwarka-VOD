@@ -1208,7 +1208,7 @@ function providerLogoUrl(array $providerMeta): string
 function groupLabelForType(string $typeKey): ?string
 {
     return match ($typeKey) {
-        'subscription', 'watchRentMonth' => 'Abonament',
+        'subscription' => 'Abonament',
         'watchFree' => 'Za darmo',
         'watchWithAds' => 'Z reklamami',
         'buy' => 'Kup',
@@ -1219,27 +1219,67 @@ function groupLabelForType(string $typeKey): ?string
     };
 }
 
-function providerTypeFromPayment(bool $hasBoth, array $payments): string
+function providerTypeFromPayment(array $payments): string
 {
-    if ($hasBoth) {
-        return 'buyOrRent';
+    $hasSubscription = false;
+    $hasFree = false;
+    $hasAds = false;
+    $hasInternetTv = false;
+    $hasBuy = false;
+    $hasRent = false;
+
+    foreach ($payments as $payment) {
+        if (!is_array($payment)) {
+            continue;
+        }
+
+        $hasSubscription = $hasSubscription || !empty($payment['subscription']);
+        $hasFree = $hasFree || !empty($payment['free']);
+        $hasAds = $hasAds || !empty($payment['hasAds']);
+        $hasInternetTv = $hasInternetTv || !empty($payment['internetTv']);
+        $hasBuy = $hasBuy || !empty($payment['buy']);
+        $hasRent = $hasRent || !empty($payment['rent']);
     }
 
-    $accessType = isset($payments[0]['accessType']) ? (int) $payments[0]['accessType'] : -1;
-    $hasAds = !empty($payments[0]['hasAds']);
+    if ($hasSubscription) {
+        return 'subscription';
+    }
 
-    if ($accessType === 3 && $hasAds) {
+    if ($hasFree && $hasAds) {
         return 'watchWithAds';
     }
 
-    return match ($accessType) {
-        0 => 'subscription',
-        1 => 'rent',
-        2 => 'buy',
-        3 => 'watchFree',
-        4 => 'onlineTelevision',
-        default => 'subscription',
-    };
+    if ($hasFree) {
+        return 'watchFree';
+    }
+
+    if ($hasInternetTv) {
+        return 'onlineTelevision';
+    }
+
+    if ($hasBuy && $hasRent) {
+        return 'buyOrRent';
+    }
+
+    if ($hasBuy) {
+        return 'buy';
+    }
+
+    if ($hasRent) {
+        return 'rent';
+    }
+
+    return 'unknown';
+}
+
+function providerHasSubscriptionPlan(array $providerMeta): bool
+{
+    $subscriptionPrices = trim((string) ($providerMeta['abonaments'] ?? ''));
+    $planPrices = is_array($providerMeta['abonamentPricesPerPlan'] ?? null)
+        ? $providerMeta['abonamentPricesPerPlan']
+        : [];
+
+    return $subscriptionPrices !== '' || $planPrices !== [];
 }
 
 function selectPaymentsGroup(array $payments, string $groupType): ?array
@@ -1269,7 +1309,7 @@ function selectPaymentsGroup(array $payments, string $groupType): ?array
             static fn (array $item): string => trim((string) ($item['paymentType'] ?? '')),
             $groupItems
         ))));
-        $type = providerTypeFromPayment(count($paymentTypes) > 1, $groupItems);
+        $type = providerTypeFromPayment($groupItems);
 
         if ($groupType === 'buyOrRent' && in_array($type, ['buy', 'rent', 'buyOrRent'], true)) {
             return [
@@ -1278,7 +1318,7 @@ function selectPaymentsGroup(array $payments, string $groupType): ?array
             ];
         }
 
-        if ($groupType === 'watchOrFree' && in_array($type, ['subscription', 'watchFree', 'watchRentMonth'], true)) {
+        if ($groupType === 'watchOrFree' && $type === 'subscription') {
             return [
                 'type' => $type,
                 'link' => trim((string) ($groupItems[0]['paymentUrl'] ?? '')),
@@ -1301,20 +1341,6 @@ function selectPaymentsGroup(array $payments, string $groupType): ?array
     }
 
     return null;
-}
-
-function numericListFromString(string $value): array
-{
-    $parts = preg_split('/\D+/', $value, -1, PREG_SPLIT_NO_EMPTY);
-
-    if (!is_array($parts)) {
-        return [];
-    }
-
-    return array_values(array_filter(array_map(
-        static fn (string $part): int => (int) $part,
-        $parts
-    )));
 }
 
 function addProviderToGroups(array &$groups, string $typeKey, int $providerId, array $providerMeta, array $offer, ?array $selectedGroup): void
@@ -1383,50 +1409,18 @@ function normalizeFilmwebProviders(array $offers, array $providers, ?string $vod
         $providerMeta = $providerMap[$providerId];
         $payments = is_array($offer['payments'] ?? null) ? $offer['payments'] : [];
 
-        $buyOrRent = selectPaymentsGroup($payments, 'buyOrRent');
-        $watchOrFree = selectPaymentsGroup($payments, 'watchOrFree');
-        $watchOnlineTelevision = selectPaymentsGroup($payments, 'watchOnlineTelevision');
-        $freeWithAds = selectPaymentsGroup($payments, 'freeWithAds');
+        $subscription = $payments !== []
+            ? selectPaymentsGroup($payments, 'watchOrFree')
+            : (providerHasSubscriptionPlan($providerMeta)
+                ? [
+                    'type' => 'subscription',
+                    'link' => trim((string) ($offer['link'] ?? '')),
+                ]
+                : null);
 
-        if ($buyOrRent !== null) {
-            addProviderToGroups($groups, $buyOrRent['type'], $providerId, $providerMeta, $offer, $buyOrRent);
+        if ($subscription !== null) {
+            addProviderToGroups($groups, $subscription['type'], $providerId, $providerMeta, $offer, $subscription);
         }
-
-        if ($watchOrFree !== null) {
-            addProviderToGroups($groups, $watchOrFree['type'], $providerId, $providerMeta, $offer, $watchOrFree);
-        }
-
-        if ($watchOnlineTelevision !== null) {
-            addProviderToGroups($groups, $watchOnlineTelevision['type'], $providerId, $providerMeta, $offer, $watchOnlineTelevision);
-        }
-
-        if ($freeWithAds !== null) {
-            addProviderToGroups($groups, $freeWithAds['type'], $providerId, $providerMeta, $offer, $freeWithAds);
-        }
-
-        if ($buyOrRent !== null || $watchOrFree !== null || $watchOnlineTelevision !== null || $freeWithAds !== null) {
-            continue;
-        }
-
-        $subscriptionPrices = numericListFromString((string) ($providerMeta['abonaments'] ?? ''));
-
-        if ($subscriptionPrices !== [] && $providerId !== 7) {
-            addProviderToGroups($groups, 'subscription', $providerId, $providerMeta, $offer, null);
-            continue;
-        }
-
-        $planPrices = is_array($providerMeta['abonamentPricesPerPlan'] ?? null)
-            ? $providerMeta['abonamentPricesPerPlan']
-            : [];
-        $extraData = json_decode((string) ($offer['extraData'] ?? ''), true);
-        $packages = is_array($extraData['packages'] ?? null) ? $extraData['packages'] : [];
-
-        if ($planPrices !== [] && $packages !== []) {
-            addProviderToGroups($groups, 'subscription', $providerId, $providerMeta, $offer, null);
-            continue;
-        }
-
-        addProviderToGroups($groups, 'watchRentMonth', $providerId, $providerMeta, $offer, null);
     }
 
     $finalGroups = [];

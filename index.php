@@ -2086,16 +2086,6 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
       },
     };
 
-    const providerLabels = {
-      flatrate: "Abonament",
-      free: "Za darmo",
-      ads: "Z reklamami",
-      rent: "Wypożycz",
-      buy: "Kup",
-      buyOrRent: "Kup / wypożycz",
-      onlineTelevision: "Telewizja online",
-    };
-
     const compactProviderNames = {
       "Amazon Prime Video": "Prime Video",
       "Prime Video": "Prime Video",
@@ -3051,7 +3041,7 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
 
     async function enrichCatalogItem(item, region, extra = {}) {
       const [providers, genreMaps, exactFilmwebUrl] = await Promise.all([
-        resolveProviderData(item, region),
+        resolveProviderData(item),
         loadGenreMaps(),
         resolveExactFilmwebUrl(item),
       ]);
@@ -3103,66 +3093,12 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
         genres: [],
         overview: item.overview || "",
         poster: imageUrl(item.poster_path || "", "w342"),
-        providers: loadingProviderData("tmdb"),
+        providers: loadingProviderData("filmweb"),
         filmwebUrl: "",
         filmwebLoading: true,
         badge: null,
         sourceItem: item,
         region,
-      };
-    }
-
-    function normalizeProviders(response, region) {
-      const regionData = response && response.results ? response.results[region] : null;
-
-      if (!regionData || typeof regionData !== "object") {
-        return emptyProviderData("tmdb");
-      }
-
-      const groups = {};
-
-      Object.entries({
-        flatrate: providerLabels.flatrate,
-      }).forEach(([key, label]) => {
-        const seen = new Set();
-
-        const providers = (regionData[key] || [])
-          .filter((provider) => {
-            if (!provider || seen.has(provider.provider_id)) {
-              return false;
-            }
-
-            seen.add(provider.provider_id);
-
-            return true;
-          })
-          .map((provider) => ({
-            name: provider.provider_name || "Nieznany serwis",
-            logo: imageUrl(provider.logo_path || "", "w92"),
-            priority: Number.isFinite(provider.display_priority)
-              ? provider.display_priority
-              : 9999,
-          }))
-          .sort((left, right) => {
-            if (left.priority !== right.priority) {
-              return left.priority - right.priority;
-            }
-
-            return left.name.localeCompare(right.name, "pl");
-          });
-
-        if (providers.length) {
-          groups[label] = providers;
-        }
-      });
-
-      return {
-        hasData: Object.keys(groups).length > 0,
-        link: regionData.link || null,
-        groups,
-        source: "tmdb",
-        attributionLabel: null,
-        attributionUrl: null,
       };
     }
 
@@ -3211,7 +3147,7 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
       };
     }
 
-    function emptyProviderData(source = "tmdb") {
+    function emptyProviderData(source = "filmweb") {
       return {
         hasData: false,
         loading: false,
@@ -3223,7 +3159,7 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
       };
     }
 
-    function loadingProviderData(source = "tmdb") {
+    function loadingProviderData(source = "filmweb") {
       return {
         ...emptyProviderData(source),
         loading: true,
@@ -3261,35 +3197,14 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
         .catch(() => null);
     }
 
-    async function resolveProviderData(item, region) {
-      const endpoint = item.media_type === "movie"
-        ? `/movie/${item.id}/watch/providers`
-        : `/tv/${item.id}/watch/providers`;
-
-      let tmdbProviders = emptyProviderData("tmdb");
-
-      try {
-        const providersPayload = await tmdbRequest(endpoint, {});
-        tmdbProviders = normalizeProviders(providersPayload, region);
-
-        if (tmdbProviders.hasData) {
-          return tmdbProviders;
-        }
-      } catch (error) {
-        tmdbProviders = emptyProviderData("tmdb");
-      }
-
-      if (String(region || "").toUpperCase() !== DEFAULT_REGION) {
-        return tmdbProviders;
-      }
-
+    async function resolveProviderData(item) {
       const filmwebProviders = await loadFilmwebProviderData(item);
 
       if (filmwebProviders && filmwebProviders.hasData) {
         return filmwebProviders;
       }
 
-      return tmdbProviders;
+      return emptyProviderData("filmweb");
     }
 
     function setHomeNewsToggleState(isExpanded, isLoading = false) {
@@ -4795,7 +4710,7 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
 
         setMessage(
           "info",
-          `Brak dopasowań albo nie udało się znaleźć danych VOD dla regionu ${region} w TMDb ani Filmweb.`
+          `Brak dopasowań albo nie udało się znaleźć danych VOD w Filmwebie.`
         );
 
         hideHomeSections();
@@ -4983,7 +4898,7 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
           if (existingItem && existingItem.providers?.loading) {
             searchState.renderedItems[targetIndex] = {
               ...existingItem,
-              providers: emptyProviderData("tmdb"),
+              providers: emptyProviderData("filmweb"),
             };
             hasUpdates = true;
           }
