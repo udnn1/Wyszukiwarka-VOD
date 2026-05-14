@@ -2893,7 +2893,13 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
       let score = nameScore;
 
       collectionData.parts.forEach((part) => {
-        const details = titleMatchDetails(mediaTitle(part), query);
+        const details = candidateTitles(part).reduce((bestDetails, title) => {
+          const titleDetails = titleMatchDetails(title, query);
+
+          return !bestDetails || titleDetails.score > bestDetails.score
+            ? titleDetails
+            : bestDetails;
+        }, null) || titleMatchDetails(mediaTitle(part), query);
 
         score += details.score;
 
