@@ -168,6 +168,44 @@ def absolute_filmweb_url(href: str) -> str:
     return absolute_url(FILMWEB_BASE_URL, href)
 
 
+def upflix_catalog_key_from_url(url: str) -> str:
+    path = urllib.parse.urlparse(url).path.strip("/")
+
+    if not path:
+        return ""
+
+    match = re.match(r"^(?:film|serial)/zobacz/([^/?#]+)", path, re.I)
+
+    if match:
+        return match.group(1).lower()
+
+    return ""
+
+
+def usable_upflix_poster_url(url: str) -> str:
+    url = absolute_upflix_url(url)
+
+    if not url or url.startswith("data:"):
+        return ""
+
+    if "no-poster" in url.lower():
+        return ""
+
+    return url
+
+
+def poster_title_keys_from_text(value: str) -> list[str]:
+    keys = []
+
+    for title in re.split(r"\s*/\s*", clean_text(value)):
+        key = normalize_key(clean_title(title))
+
+        if key and key not in keys:
+            keys.append(key)
+
+    return keys
+
+
 def media_type_from_url(url: str) -> str | None:
     lowered = url.lower()
 
@@ -563,6 +601,75 @@ def parse_table_items(table_html: str, section_type: str, article_url: str, arti
     return items
 
 
+def article_poster_maps(article_html: str) -> dict[str, dict[str, str]]:
+    page = Selector(article_html)
+    maps: dict[str, dict[str, str]] = {
+        "byUrl": {},
+        "byTitle": {},
+    }
+
+    for anchor in page.css("a"):
+        url_key = upflix_catalog_key_from_url(absolute_upflix_url(anchor.css("::attr(href)").get() or ""))
+
+        if not url_key:
+            continue
+
+        image_sources = []
+
+        for attribute in ("data-src", "data-original", "data-lazy", "src"):
+            image_sources.extend(anchor.css(f"img::attr({attribute})").getall())
+
+        poster = ""
+
+        for source in image_sources:
+            poster = usable_upflix_poster_url(source)
+
+            if poster:
+                break
+
+        if not poster:
+            continue
+
+        if url_key not in maps["byUrl"]:
+            maps["byUrl"][url_key] = poster
+
+        for alt in anchor.css("img::attr(alt)").getall():
+            for title_key in poster_title_keys_from_text(alt):
+                maps["byTitle"].setdefault(title_key, poster)
+
+    return maps
+
+
+def apply_article_posters_to_items(items: list[dict[str, Any]], article_html: str) -> list[dict[str, Any]]:
+    if not items:
+        return items
+
+    try:
+        maps = article_poster_maps(article_html)
+    except Exception:
+        return items
+
+    for item in items:
+        if item.get("poster"):
+            continue
+
+        url_key = upflix_catalog_key_from_url(str(item.get("url") or ""))
+        poster = maps["byUrl"].get(url_key, "") if url_key else ""
+
+        if not poster:
+            for title in (str(item.get("title") or ""), str(item.get("originalTitle") or "")):
+                title_key = normalize_key(title)
+
+                if title_key and title_key in maps["byTitle"]:
+                    poster = maps["byTitle"][title_key]
+                    break
+
+        if poster:
+            item["poster"] = poster
+
+    return items
+
+
 def element_html(element: Any) -> str:
     try:
         from lxml import etree
@@ -717,7 +824,7 @@ def parse_article_items(article_html: str, article_url: str, article_date: str |
     except Exception:
         pass
 
-    return dedupe_items(items)
+    return apply_article_posters_to_items(dedupe_items(items), article_html)
 
 
 def sort_items_latest_first(items: list[dict[str, Any]]) -> list[dict[str, Any]]:

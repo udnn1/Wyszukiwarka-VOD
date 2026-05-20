@@ -609,6 +609,168 @@ function first_anchor_href(DOMNode $node): string
     return absolute_upflix_url($anchors->item(0)?->getAttribute('href') ?? '');
 }
 
+function upflix_catalog_key_from_url(string $url): string
+{
+    $path = parse_url($url, PHP_URL_PATH);
+
+    if (!is_string($path) || $path === '') {
+        return '';
+    }
+
+    $path = trim($path, '/');
+
+    if (preg_match('~^(?:film|serial)/zobacz/([^/?#]+)~i', $path, $matches) === 1) {
+        return strtolower($matches[1]);
+    }
+
+    return '';
+}
+
+function usable_upflix_poster_url(string $url): string
+{
+    $url = absolute_upflix_url($url);
+
+    if ($url === '' || str_starts_with($url, 'data:')) {
+        return '';
+    }
+
+    if (str_contains(strtolower($url), 'no-poster')) {
+        return '';
+    }
+
+    return $url;
+}
+
+function first_image_poster_url(DOMElement $node): string
+{
+    $images = strtolower($node->tagName) === 'img'
+        ? [$node]
+        : iterator_to_array($node->getElementsByTagName('img'));
+
+    foreach ($images as $image) {
+        if (!($image instanceof DOMElement)) {
+            continue;
+        }
+
+        foreach (['data-src', 'data-original', 'data-lazy', 'src'] as $attribute) {
+            $poster = usable_upflix_poster_url($image->getAttribute($attribute));
+
+            if ($poster !== '') {
+                return $poster;
+            }
+        }
+    }
+
+    return '';
+}
+
+function poster_title_keys_from_text(string $value): array
+{
+    $keys = [];
+
+    foreach (preg_split('#\s*/\s*#u', clean_text($value)) ?: [] as $title) {
+        $key = normalize_key(clean_title($title));
+
+        if ($key !== '') {
+            $keys[$key] = true;
+        }
+    }
+
+    return array_keys($keys);
+}
+
+function article_poster_maps(DOMDocument $document): array
+{
+    $maps = [
+        'byUrl' => [],
+        'byTitle' => [],
+    ];
+    $xpath = new DOMXPath($document);
+    $anchors = $xpath->query('//a[.//img]');
+
+    if (!($anchors instanceof DOMNodeList)) {
+        return $maps;
+    }
+
+    foreach ($anchors as $anchor) {
+        if (!($anchor instanceof DOMElement)) {
+            continue;
+        }
+
+        $urlKey = upflix_catalog_key_from_url(absolute_upflix_url($anchor->getAttribute('href')));
+
+        if ($urlKey === '') {
+            continue;
+        }
+
+        $poster = first_image_poster_url($anchor);
+
+        if ($poster === '') {
+            continue;
+        }
+
+        if (!isset($maps['byUrl'][$urlKey])) {
+            $maps['byUrl'][$urlKey] = $poster;
+        }
+
+        foreach ($anchor->getElementsByTagName('img') as $image) {
+            if (!($image instanceof DOMElement)) {
+                continue;
+            }
+
+            foreach (poster_title_keys_from_text($image->getAttribute('alt')) as $titleKey) {
+                if (!isset($maps['byTitle'][$titleKey])) {
+                    $maps['byTitle'][$titleKey] = $poster;
+                }
+            }
+        }
+    }
+
+    return $maps;
+}
+
+function apply_article_posters_to_items(array $items, string $html): array
+{
+    if ($items === []) {
+        return $items;
+    }
+
+    try {
+        $maps = article_poster_maps(load_dom_document($html));
+    } catch (Throwable $exception) {
+        return $items;
+    }
+
+    foreach ($items as &$item) {
+        if (!empty($item['poster'])) {
+            continue;
+        }
+
+        $urlKey = upflix_catalog_key_from_url((string) ($item['url'] ?? ''));
+        $titleKeys = [
+            normalize_key((string) ($item['title'] ?? '')),
+            normalize_key((string) ($item['originalTitle'] ?? '')),
+        ];
+        $poster = $urlKey !== '' ? ($maps['byUrl'][$urlKey] ?? '') : '';
+
+        if ($poster === '') {
+            foreach ($titleKeys as $titleKey) {
+                if ($titleKey !== '' && isset($maps['byTitle'][$titleKey])) {
+                    $poster = $maps['byTitle'][$titleKey];
+                    break;
+                }
+            }
+        }
+
+        if ($poster !== '') {
+            $item['poster'] = $poster;
+        }
+    }
+    unset($item);
+
+    return $items;
+}
+
 function extract_year_from_cells(array $cells): ?int
 {
     for ($index = count($cells) - 1; $index >= 0; $index--) {
@@ -1000,7 +1162,7 @@ function parse_article_items(string $html, string $articleUrl, ?string $articleD
     $items = array_merge($items, parse_article_items_by_heading_segments($html, $articleUrl, $articleDate));
     $items = array_merge($items, parse_article_items_by_specific_heading_regex($html, $articleUrl, $articleDate));
 
-    return dedupe_items($items);
+    return apply_article_posters_to_items(dedupe_items($items), $html);
 }
 
 function sort_items_latest_first(array $items): array

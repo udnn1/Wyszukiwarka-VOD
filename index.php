@@ -4234,13 +4234,15 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
           ? englishTitleForDisplay({ original_language: "en" }, title, item.originalTitle)
           : (tmdbItem ? englishTitleForDisplay(tmdbItem, title) : "");
 
+        const tmdbPoster = tmdbItem ? imageUrl(tmdbItem.poster_path || "", "w342") : null;
+
         return {
           ...item,
           title,
           englishTitle,
           genres: tmdbItem ? genreNamesForItem(tmdbItem, genreMaps) : [],
           overview: tmdbItem && tmdbItem.overview ? tmdbItem.overview : "",
-          poster: tmdbItem ? imageUrl(tmdbItem.poster_path || "", "w342") : null,
+          poster: tmdbPoster || item.poster || null,
           posterLoading: false,
           filmwebUrl: item.filmwebUrl || filmwebUrl || "",
           filmwebLoading: false,
