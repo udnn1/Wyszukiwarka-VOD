@@ -217,7 +217,10 @@ function tmdbRequest(string $path, array $params, array $credentials): array
     $query = http_build_query($params);
     $baseUrl = tmdbBaseUrl();
     $url = $baseUrl . $path . ($query !== '' ? '?' . $query : '');
-    $headers = ['Accept: application/json'];
+    $headers = [
+        'Accept: application/json',
+        'Accept-Encoding: identity',
+    ];
     $preferApiKey = str_starts_with($baseUrl, 'http://');
 
     if (!$preferApiKey && $credentials['bearer'] !== '') {
@@ -251,7 +254,7 @@ function tmdbRequest(string $path, array $params, array $credentials): array
         $statusCode = (int) curl_getinfo($curlHandle, CURLINFO_RESPONSE_CODE);
         curl_close($curlHandle);
 
-        return [$statusCode, (string) $body];
+        return [$statusCode, decodeTmdbResponseBody((string) $body)];
     }
 
     $context = stream_context_create([
@@ -280,7 +283,26 @@ function tmdbRequest(string $path, array $params, array $credentials): array
         }
     }
 
-    return [$statusCode, (string) $body];
+    return [$statusCode, decodeTmdbResponseBody((string) $body)];
+}
+
+function decodeTmdbResponseBody(string $body): string
+{
+    if (!str_starts_with($body, "\x1f\x8b")) {
+        return $body;
+    }
+
+    if (!function_exists('gzdecode')) {
+        jsonResponse(502, ['error' => 'TMDb zwróciło skompresowaną odpowiedź, ale PHP nie ma obsługi gzip.']);
+    }
+
+    $decoded = @gzdecode($body);
+
+    if (!is_string($decoded)) {
+        jsonResponse(502, ['error' => 'Nie udało się rozpakować odpowiedzi TMDb.']);
+    }
+
+    return $decoded;
 }
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
