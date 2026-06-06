@@ -2665,6 +2665,7 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
             originalTitle: item.original_title || item.original_name || "",
             year: mediaYear(item) || "",
             mediaType,
+            providers: "1",
           });
 
           const filmwebId = Number(payload && payload.id);
@@ -2672,11 +2673,15 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
           return {
             id: Number.isFinite(filmwebId) && filmwebId > 0 ? filmwebId : null,
             url: payload && payload.url ? payload.url : fallbackUrl,
+            providers: payload && payload.providers
+              ? normalizeFilmwebProviders(payload.providers)
+              : null,
           };
         } catch (error) {
           return {
             id: null,
             url: fallbackUrl,
+            providers: null,
           };
         }
       })();
@@ -3183,6 +3188,12 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
 
           if (!filmwebId) {
             return null;
+          }
+
+          if (match && match.providers) {
+            filmwebProviderDataCache.set(filmwebId, Promise.resolve(match.providers));
+
+            return match.providers;
           }
 
           if (filmwebProviderDataCache.has(filmwebId)) {
