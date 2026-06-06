@@ -1027,10 +1027,6 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
       filter: grayscale(1);
     }
 
-    .mini-filmweb-logo.is-loading-filmweb {
-      animation: posterPulse 1.45s ease-in-out infinite;
-    }
-
     .card-poster-column {
       display: grid;
       align-content: start;
@@ -1065,10 +1061,6 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
       opacity: 0.45;
       pointer-events: none;
       filter: grayscale(1);
-    }
-
-    .card-filmweb-button.is-loading-filmweb {
-      animation: posterPulse 1.45s ease-in-out infinite;
     }
 
     .card-filmweb-button::before {
@@ -2756,6 +2748,60 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
       return request;
     }
 
+    function primeFilmwebNewsLinks(items) {
+      const pending = [];
+
+      (items || []).forEach((item) => {
+        const title = item.title || "";
+        const originalTitle = item.originalTitle || "";
+        const year = item.year || "";
+        const mediaType = filmwebMediaTypeFromNewsItem(item);
+        const cacheKey = `${item.mediaType || ""}:${title}:${originalTitle}:${year}`;
+
+        if (filmwebNewsMatchCache.has(cacheKey)) {
+          return;
+        }
+
+        if (!mediaType || (!title && !originalTitle)) {
+          filmwebNewsMatchCache.set(cacheKey, Promise.resolve(""));
+          return;
+        }
+
+        pending.push({ cacheKey, title, originalTitle, year, mediaType });
+      });
+
+      if (!pending.length) {
+        return Promise.resolve();
+      }
+
+      const batchPromise = filmwebRequest({
+        action: "matchBatch",
+        items: JSON.stringify(pending.map((entry) => ({
+          title: entry.title,
+          originalTitle: entry.originalTitle,
+          year: entry.year,
+          mediaType: entry.mediaType,
+        }))),
+      })
+        .then((payload) => (payload && Array.isArray(payload.results) ? payload.results : []))
+        .catch(() => []);
+
+      pending.forEach((entry, index) => {
+        const urlPromise = batchPromise.then((results) => {
+          const result = results[index];
+          const filmwebId = Number(result && result.id);
+
+          return Number.isFinite(filmwebId) && filmwebId > 0 && result && result.url
+            ? result.url
+            : "";
+        });
+
+        filmwebNewsMatchCache.set(entry.cacheKey, urlPromise);
+      });
+
+      return batchPromise;
+    }
+
     function dedupeSearchResults(items) {
       const uniqueItems = new Map();
 
@@ -4305,6 +4351,8 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
 
       enrichedItems.push(...nextItems.map((rawItem) => baseNewsDisplayItem(rawItem)));
       renderHomeShelf(platform);
+
+      primeFilmwebNewsLinks(nextItems);
 
       return Promise.allSettled(nextItems.map((rawItem) => enrichNewsItem(rawItem)))
         .then((results) => {

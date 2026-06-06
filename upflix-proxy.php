@@ -112,6 +112,84 @@ function http_get(string $url): string
     return $body;
 }
 
+function http_get_multi(array $urls): array
+{
+    if ($urls === []) {
+        return [];
+    }
+
+    $headers = [
+        'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,application/rss+xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language: pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Cache-Control: no-cache',
+        'Pragma: no-cache',
+        'Referer: https://upflix.pl/',
+        'Upgrade-Insecure-Requests: 1',
+        'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+    ];
+
+    if (!function_exists('curl_multi_init') || !function_exists('curl_init')) {
+        $result = [];
+
+        foreach ($urls as $key => $url) {
+            try {
+                $result[$key] = http_get($url);
+            } catch (Throwable $exception) {
+            }
+        }
+
+        return $result;
+    }
+
+    $multiHandle = curl_multi_init();
+    $handles = [];
+
+    foreach ($urls as $key => $url) {
+        $handle = curl_init($url);
+
+        curl_setopt_array($handle, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS => 5,
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT => 25,
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_ENCODING => '',
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+        ]);
+
+        curl_multi_add_handle($multiHandle, $handle);
+        $handles[$key] = $handle;
+    }
+
+    do {
+        $status = curl_multi_exec($multiHandle, $running);
+
+        if ($running) {
+            curl_multi_select($multiHandle, 1.0);
+        }
+    } while ($running && $status === CURLM_OK);
+
+    $result = [];
+
+    foreach ($handles as $key => $handle) {
+        $body = curl_multi_getcontent($handle);
+        $statusCode = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
+
+        curl_multi_remove_handle($multiHandle, $handle);
+        curl_close($handle);
+
+        if ($statusCode >= 200 && $statusCode < 300 && is_string($body) && trim($body) !== '') {
+            $result[$key] = $body;
+        }
+    }
+
+    curl_multi_close($multiHandle);
+
+    return $result;
+}
+
 function clean_text(string $value): string
 {
     $value = html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
@@ -1207,38 +1285,23 @@ function build_payload(string $platform, int $limit): array
     $allItems = [];
     $lastError = null;
 
+    $candidates = [];
+
     foreach ($articles as $article) {
         if (!article_is_recent($article['publishedAt'])) {
             break;
         }
 
-        try {
-            $articleHtml = http_get($article['url']);
-            $articleDate = extract_article_date_from_html($articleHtml, $article['publishedAt']);
-            $article['publishedAt'] = $articleDate;
+        $candidates[] = $article;
+    }
 
-            if (!article_is_recent($articleDate)) {
-                break;
-            }
+    $htmlByIndex = http_get_multi(
+        array_map(static fn(array $candidate): string => $candidate['url'], $candidates)
+    );
 
-            $items = parse_article_items($articleHtml, $article['url'], $articleDate);
-
-            foreach ($items as &$item) {
-                $item['sourceArticleTitle'] = $article['title'];
-                $item['sourceArticleUrl'] = $article['url'];
-            }
-            unset($item);
-
-            $scannedArticles[] = [
-                'title' => $article['title'],
-                'url' => $article['url'],
-                'publishedAt' => $article['publishedAt'],
-                'itemsFound' => count($items),
-            ];
-
-            $allItems = array_merge($allItems, $items);
-        } catch (Throwable $exception) {
-            $lastError = $exception->getMessage();
+    foreach ($candidates as $index => $article) {
+        if (!isset($htmlByIndex[$index])) {
+            $lastError = 'Nie udało się pobrać artykułu: ' . $article['url'];
 
             $scannedArticles[] = [
                 'title' => $article['title'],
@@ -1250,6 +1313,31 @@ function build_payload(string $platform, int $limit): array
 
             continue;
         }
+
+        $articleHtml = $htmlByIndex[$index];
+        $articleDate = extract_article_date_from_html($articleHtml, $article['publishedAt']);
+        $article['publishedAt'] = $articleDate;
+
+        if (!article_is_recent($articleDate)) {
+            break;
+        }
+
+        $items = parse_article_items($articleHtml, $article['url'], $articleDate);
+
+        foreach ($items as &$item) {
+            $item['sourceArticleTitle'] = $article['title'];
+            $item['sourceArticleUrl'] = $article['url'];
+        }
+        unset($item);
+
+        $scannedArticles[] = [
+            'title' => $article['title'],
+            'url' => $article['url'],
+            'publishedAt' => $article['publishedAt'],
+            'itemsFound' => count($items),
+        ];
+
+        $allItems = array_merge($allItems, $items);
     }
 
     $allItems = sort_items_latest_first(dedupe_items($allItems));

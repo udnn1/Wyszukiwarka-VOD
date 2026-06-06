@@ -1213,29 +1213,21 @@ function fetchTitleInfoBatch(array $ids): array
     return $result;
 }
 
-function matchFilmwebTitle(string $title, string $originalTitle, ?int $year, string $mediaType, ?array &$matchedTitleInfo = null): array
+function filmwebMatchQueries(string $title, string $originalTitle, ?int $year): array
 {
-    $queries = array_values(array_unique(array_filter([
+    return array_values(array_unique(array_filter([
         trim(implode(' ', array_filter([$title, $year ? (string) $year : '']))),
         trim(implode(' ', array_filter([$originalTitle, $year ? (string) $year : '']))),
         $title,
         $originalTitle,
     ])));
+}
 
-    $fallbackUrl = filmwebSearchUrl($title !== '' ? $title : $originalTitle, $year);
+function filmwebCandidatesFromSearchPayloads(array $searchPayloads, string $mediaType, int $maxCandidates): array
+{
     $candidates = [];
-    $maxCandidates = 10;
 
-    $searchUrls = [];
-
-    foreach ($queries as $index => $query) {
-        $searchUrls[(string) $index] = FILMWEB_API_BASE . '/search?' . http_build_query(['query' => $query]);
-    }
-
-    $searchPayloads = filmwebGetMulti($searchUrls);
-
-    foreach ($queries as $index => $query) {
-        $searchPayload = $searchPayloads[(string) $index] ?? [];
+    foreach ($searchPayloads as $searchPayload) {
         $searchHits = is_array($searchPayload['searchHits'] ?? null) ? $searchPayload['searchHits'] : [];
 
         foreach ($searchHits as $hit) {
@@ -1256,10 +1248,12 @@ function matchFilmwebTitle(string $title, string $originalTitle, ?int $year, str
         }
     }
 
+    return $candidates;
+}
+
+function filmwebResolveBestMatch(array $candidates, array $titleInfoById, string $title, string $originalTitle, ?int $year, string $mediaType, string $fallbackUrl, ?array &$matchedTitleInfo = null): array
+{
     $bestMatch = null;
-    $titleInfoById = fetchTitleInfoBatch(
-        array_map(static fn(array $hit): int => (int) $hit['id'], $candidates)
-    );
 
     foreach ($candidates as $hit) {
         $hitId = (int) $hit['id'];
@@ -1314,6 +1308,131 @@ function matchFilmwebTitle(string $title, string $originalTitle, ?int $year, str
         'id' => $bestMatch['id'],
         'url' => filmwebEntityUrl($resolvedType, $resolvedTitle, $resolvedYear, $bestMatch['id']),
     ];
+}
+
+function matchFilmwebTitle(string $title, string $originalTitle, ?int $year, string $mediaType, ?array &$matchedTitleInfo = null): array
+{
+    $queries = filmwebMatchQueries($title, $originalTitle, $year);
+    $fallbackUrl = filmwebSearchUrl($title !== '' ? $title : $originalTitle, $year);
+
+    $searchUrls = [];
+
+    foreach ($queries as $index => $query) {
+        $searchUrls[(string) $index] = FILMWEB_API_BASE . '/search?' . http_build_query(['query' => $query]);
+    }
+
+    $searchPayloads = [];
+
+    foreach (filmwebGetMulti($searchUrls) as $index => $payload) {
+        $searchPayloads[(int) $index] = $payload;
+    }
+
+    $candidates = filmwebCandidatesFromSearchPayloads($searchPayloads, $mediaType, 10);
+
+    $titleInfoById = fetchTitleInfoBatch(
+        array_map(static fn(array $hit): int => (int) $hit['id'], $candidates)
+    );
+
+    return filmwebResolveBestMatch(
+        $candidates,
+        $titleInfoById,
+        $title,
+        $originalTitle,
+        $year,
+        $mediaType,
+        $fallbackUrl,
+        $matchedTitleInfo
+    );
+}
+
+function matchFilmwebBatch(array $items): array
+{
+    $prepared = [];
+    $searchUrls = [];
+
+    foreach ($items as $i => $item) {
+        if (!is_array($item)) {
+            $prepared[$i] = null;
+            continue;
+        }
+
+        $title = is_string($item['title'] ?? null) ? trim($item['title']) : '';
+        $originalTitle = is_string($item['originalTitle'] ?? null) ? trim($item['originalTitle']) : '';
+        $year = isset($item['year']) && preg_match('/^\d{4}$/', (string) $item['year']) ? (int) $item['year'] : null;
+        $mediaType = is_string($item['mediaType'] ?? null) ? $item['mediaType'] : '';
+
+        if (($title === '' && $originalTitle === '') || !in_array($mediaType, FILMWEB_ALLOWED_MEDIA_TYPES, true)) {
+            $prepared[$i] = ['fallbackUrl' => filmwebSearchUrl($title !== '' ? $title : $originalTitle, $year)];
+            continue;
+        }
+
+        $queries = filmwebMatchQueries($title, $originalTitle, $year);
+
+        $prepared[$i] = [
+            'title' => $title,
+            'originalTitle' => $originalTitle,
+            'year' => $year,
+            'mediaType' => $mediaType,
+            'queries' => $queries,
+            'fallbackUrl' => filmwebSearchUrl($title !== '' ? $title : $originalTitle, $year),
+        ];
+
+        foreach ($queries as $qi => $query) {
+            $searchUrls[$i . "\t" . $qi] = FILMWEB_API_BASE . '/search?' . http_build_query(['query' => $query]);
+        }
+    }
+
+    $searchResults = filmwebGetMulti($searchUrls);
+
+    $itemCandidates = [];
+    $allIds = [];
+
+    foreach ($prepared as $i => $info) {
+        if ($info === null || !isset($info['queries'])) {
+            continue;
+        }
+
+        $payloads = [];
+
+        foreach ($info['queries'] as $qi => $query) {
+            $payloads[$qi] = $searchResults[$i . "\t" . $qi] ?? [];
+        }
+
+        $candidates = filmwebCandidatesFromSearchPayloads($payloads, $info['mediaType'], 10);
+        $itemCandidates[$i] = $candidates;
+
+        foreach ($candidates as $hitId => $hit) {
+            $allIds[] = (int) $hitId;
+        }
+    }
+
+    $titleInfoById = fetchTitleInfoBatch($allIds);
+
+    $results = [];
+
+    foreach ($prepared as $i => $info) {
+        if ($info === null) {
+            $results[] = ['id' => null, 'url' => ''];
+            continue;
+        }
+
+        if (!isset($info['queries'])) {
+            $results[] = ['id' => null, 'url' => $info['fallbackUrl']];
+            continue;
+        }
+
+        $results[] = filmwebResolveBestMatch(
+            $itemCandidates[$i] ?? [],
+            $titleInfoById,
+            $info['title'],
+            $info['originalTitle'],
+            $info['year'],
+            $info['mediaType'],
+            $info['fallbackUrl']
+        );
+    }
+
+    return $results;
 }
 
 function providerLogoUrl(array $providerMeta): string
@@ -1643,6 +1762,17 @@ try {
         }
 
         jsonResponse(200, $match);
+    }
+
+    if ($action === 'matchBatch') {
+        $rawItems = $_GET['items'] ?? '';
+        $decoded = is_string($rawItems) ? json_decode($rawItems, true) : null;
+
+        if (!is_array($decoded)) {
+            jsonResponse(400, ['error' => 'Brak listy tytułów do dopasowania Filmweb.']);
+        }
+
+        jsonResponse(200, ['results' => matchFilmwebBatch($decoded)]);
     }
 
     if ($action === 'providers') {
