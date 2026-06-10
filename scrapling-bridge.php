@@ -23,7 +23,13 @@ function scraplingBridgeRun(string $mode, array $params = [], int $timeoutSecond
     $pythonBinary = getenv('SCRAPLING_PYTHON');
 
     if (!is_string($pythonBinary) || trim($pythonBinary) === '') {
-        $pythonBinary = PHP_OS_FAMILY === 'Windows' ? 'python' : 'python3';
+        $venvPython = __DIR__ . DIRECTORY_SEPARATOR . '.venv' . DIRECTORY_SEPARATOR . 'bin' . DIRECTORY_SEPARATOR . 'python3';
+
+        if (is_file($venvPython)) {
+            $pythonBinary = $venvPython;
+        } else {
+            $pythonBinary = PHP_OS_FAMILY === 'Windows' ? 'python' : 'python3';
+        }
     }
 
     $command = [

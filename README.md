@@ -105,13 +105,3 @@ SCRAPLING_DISABLED=1
 ```
 
 `SCRAPLING_DISABLED=1` wyłącza warstwę Scrapling i pozostawia standardowe mechanizmy PHP.
-
-## Endpointy
-
-| Plik | Rola |
-| --- | --- |
-| `tmdb-proxy.php` | proxy do wyszukiwania, odkrywania i pobierania szczegółów z TMDB |
-| `filmweb-proxy.php` | dopasowanie tytułów, linki Filmweb i dane o dostępności |
-| `upflix-proxy.php` | pobieranie nowości z platform VOD |
-| `scrapling-bridge.php` | uruchamianie pomocniczego skryptu Python z poziomu PHP |
-| `scrapling-vod-bridge.py` | parser danych dla Upflix i Filmweb |

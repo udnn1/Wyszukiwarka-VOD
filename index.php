@@ -2229,35 +2229,6 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
         : (entry.data.name || "");
     }
 
-    function formatReleaseDate(date) {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(date || "")) {
-        return "";
-      }
-
-      const parsedDate = new Date(`${date}T00:00:00`);
-
-      if (Number.isNaN(parsedDate.getTime())) {
-        return "";
-      }
-
-      return parsedDate.toLocaleDateString("pl-PL", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      });
-    }
-
-    function sortByLatestRelease(left, right) {
-      const leftTime = Date.parse(mediaReleaseDate(left) || "1970-01-01");
-      const rightTime = Date.parse(mediaReleaseDate(right) || "1970-01-01");
-
-      if (leftTime !== rightTime) {
-        return rightTime - leftTime;
-      }
-
-      return (Number(right.popularity) || 0) - (Number(left.popularity) || 0);
-    }
-
     function sortByEarliestRelease(left, right) {
       const leftTime = Date.parse(mediaReleaseDate(left) || "9999-12-31");
       const rightTime = Date.parse(mediaReleaseDate(right) || "9999-12-31");
@@ -2295,32 +2266,6 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
         item.original_title,
         item.original_name,
       ].filter(Boolean).map((title) => String(title).trim()).filter(Boolean)));
-    }
-
-    function pickReadableLocalTitle(item) {
-      return readableTitleCandidates(item).find(isReadablePolishTitle) || "";
-    }
-
-    function pickReadableTranslatedTitle(payload, mediaType) {
-      const translations = Array.isArray(payload && payload.translations)
-        ? payload.translations
-        : [];
-
-      const polishTranslations = translations.filter((entry) => (
-        entry
-        && typeof entry === "object"
-        && (entry.iso_639_1 === "pl" || entry.iso_3166_1 === "PL")
-      ));
-
-      for (const entry of polishTranslations) {
-        const title = translationTitle(entry, mediaType);
-
-        if (isReadablePolishTitle(title)) {
-          return title;
-        }
-      }
-
-      return "";
     }
 
     async function loadGenreMaps() {
@@ -2683,29 +2628,12 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
       return request;
     }
 
-    async function resolveFilmwebUrl(item) {
-      const match = await resolveFilmwebMatch(item);
-
-      return match && match.url
-        ? match.url
-        : filmwebSearchUrl(mediaTitle(item), mediaYear(item));
-    }
-
     async function resolveExactFilmwebUrl(item) {
       const match = await resolveFilmwebMatch(item);
 
       return match && match.id && match.url
         ? match.url
         : "";
-    }
-
-    function fallbackFilmwebUrlForNewsItem(item) {
-      const title = item && (item.title || item.originalTitle)
-        ? (item.title || item.originalTitle)
-        : "";
-      const year = item && item.year ? item.year : "";
-
-      return filmwebSearchUrl(title, year);
     }
 
     async function resolveFilmwebUrlForNewsItem(item) {
@@ -3450,13 +3378,6 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
           <span>${escapeHtml(label)}</span>
         </div>
       `;
-    }
-
-    function addDaysIso(days) {
-      const date = new Date();
-      date.setDate(date.getDate() + days);
-
-      return date.toISOString().slice(0, 10);
     }
 
     function calendarDateIso(date) {

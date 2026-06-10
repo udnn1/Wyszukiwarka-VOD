@@ -844,58 +844,6 @@ function filmwebParsePremieresHtml(string $html, string $kind, int $year, int $m
     return $items;
 }
 
-function filmwebPremieresPayload(string $kind, int $monthOffset): array
-{
-    $kind = $kind === 'tv' ? 'tv' : 'movie';
-    $monthOffset = max(0, min(18, $monthOffset));
-
-    $baseDate = new DateTimeImmutable('first day of this month 00:00:00');
-    $targetDate = $baseDate->modify('+' . $monthOffset . ' months');
-    $year = (int) $targetDate->format('Y');
-    $month = (int) $targetDate->format('n');
-    $sourceUrl = filmwebPremierePageUrl($kind, $year, $month);
-    $html = filmwebPageRequest($sourceUrl);
-
-    return [
-        'kind' => $kind,
-        'year' => $year,
-        'month' => $month,
-        'monthOffset' => $monthOffset,
-        'monthLabel' => filmwebMonthName($month) . ' ' . $year,
-        'sourceUrl' => $sourceUrl,
-        'items' => filmwebParsePremieresHtml($html, $kind, $year, $month),
-    ];
-}
-
-function filmwebPremieresMonthPayload(string $kind, int $year, int $month): array
-{
-    $kind = $kind === 'tv' ? 'tv' : 'movie';
-
-    if ($month < 1 || $month > 12) {
-        jsonResponse(400, ['error' => 'Nieprawidłowy miesiąc premier.']);
-    }
-
-    $sourceUrl = filmwebPremierePageUrl($kind, $year, $month);
-    $html = filmwebPageRequest($sourceUrl);
-
-    try {
-        $items = filmwebParsePremieresHtml($html, $kind, $year, $month);
-    } catch (Throwable $exception) {
-        return premiereMonthPayload($kind, $year, $month);
-    }
-
-    return [
-        'source' => 'filmweb',
-        'url' => $sourceUrl,
-        'sourceUrl' => $sourceUrl,
-        'kind' => $kind,
-        'year' => $year,
-        'month' => $month,
-        'monthKey' => sprintf('%04d-%02d', $year, $month),
-        'monthLabel' => filmwebMonthName($month) . ' ' . $year,
-        'items' => $items,
-    ];
-}
 function normalizeComparableText(string $value): string
 {
     $value = trim($value);
