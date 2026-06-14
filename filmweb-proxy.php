@@ -1062,6 +1062,32 @@ function filmwebGetMulti(array $urls): array
         return [];
     }
 
+    $result = [];
+    $pending = $urls;
+
+    for ($attempt = 0; $attempt < 3 && $pending !== []; $attempt += 1) {
+        if ($attempt > 0) {
+            usleep(250000 * $attempt);
+        }
+
+        $fetched = filmwebGetMultiOnce($pending);
+
+        foreach ($fetched as $key => $payload) {
+            $result[$key] = $payload;
+        }
+
+        $pending = array_diff_key($pending, $fetched);
+    }
+
+    return $result;
+}
+
+function filmwebGetMultiOnce(array $urls): array
+{
+    if ($urls === []) {
+        return [];
+    }
+
     if (!function_exists('curl_multi_init') || !function_exists('curl_init')) {
         $result = [];
 
