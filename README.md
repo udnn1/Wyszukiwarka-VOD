@@ -4,10 +4,16 @@
 
 Lekka wyszukiwarka filmów i seriali pokazująca, gdzie dany tytuł jest dostępny online.
 
-![PHP](https://img.shields.io/badge/PHP-8.1%2B-777BB4?style=for-the-badge&logo=php&logoColor=white)
-![JavaScript](https://img.shields.io/badge/JavaScript-vanilla-F7DF1E?style=for-the-badge&logo=javascript&logoColor=111)
-![TMDB](https://img.shields.io/badge/TMDB-API-01B4E4?style=for-the-badge)
-![VOD](https://img.shields.io/badge/VOD-search-FF8A3D?style=for-the-badge)
+![PHP](https://img.shields.io/badge/PHP-8.1+-777BB4?style=for-the-badge&logo=php&logoColor=white&labelColor=474A8A)
+![JavaScript](https://img.shields.io/badge/JavaScript-vanilla-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black&labelColor=323330)
+![HTML5](https://img.shields.io/badge/HTML5-markup-E34F26?style=for-the-badge&logo=html5&logoColor=white&labelColor=A8341B)
+![CSS3](https://img.shields.io/badge/CSS3-styles-1572B6?style=for-the-badge&logo=css3&logoColor=white&labelColor=0E4C82)
+![Python](https://img.shields.io/badge/Python-3-3776AB?style=for-the-badge&logo=python&logoColor=white&labelColor=FFD43B)
+
+![TMDB](https://img.shields.io/badge/TMDB-API-01B4E4?style=for-the-badge&logo=themoviedatabase&logoColor=white&labelColor=0D253F)
+![Filmweb](https://img.shields.io/badge/Filmweb-data-FFD000?style=for-the-badge&logo=filmweb&logoColor=black&labelColor=E0B400)
+![Upflix](https://img.shields.io/badge/Upflix-nowości-7C3AED?style=for-the-badge&logo=netflix&logoColor=white&labelColor=4C1D95)
+![VOD](https://img.shields.io/badge/VOD-search-FF6B35?style=for-the-badge&logo=plex&logoColor=white&labelColor=C2410C)
 
 </div>
 
