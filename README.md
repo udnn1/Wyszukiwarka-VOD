@@ -105,3 +105,7 @@ SCRAPLING_DISABLED=1
 ```
 
 `SCRAPLING_DISABLED=1` wyłącza warstwę Scrapling i pozostawia standardowe mechanizmy PHP.
+
+## Wkład AI
+
+Claude (Anthropic) wykonał wyłącznie **code review** — przegląd kodu. Nie jest autorem ani współautorem kodu projektu.
