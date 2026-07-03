@@ -2026,7 +2026,7 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
     const localizedNewsItemCache = new Map();
     const enrichedSearchResultCache = new Map();
     const movieCollectionCache = new Map();
-    const filmwebProviderDataCache = new Map();
+    const tmdbProviderDataCache = new Map();
     const tmdbNewsMatchCache = new Map();
 
     let genreMapsPromise = null;
@@ -2628,14 +2628,6 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
       return request;
     }
 
-    async function resolveExactFilmwebUrl(item) {
-      const match = await resolveFilmwebMatch(item);
-
-      return match && match.id && match.url
-        ? match.url
-        : "";
-    }
-
     async function resolveFilmwebUrlForNewsItem(item) {
       const title = item.title || "";
       const originalTitle = item.originalTitle || "";
@@ -3025,14 +3017,17 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
     }
 
     async function enrichCatalogItem(item, region, extra = {}) {
-      const [providers, genreMaps, exactFilmwebUrl] = await Promise.all([
+      const deferFilmweb = extra.deferFilmweb === true;
+      const [tmdbProviders, genreMaps, filmwebMatch] = await Promise.all([
         resolveProviderData(item),
         loadGenreMaps(),
-        resolveExactFilmwebUrl(item),
+        deferFilmweb ? Promise.resolve(null) : resolveFilmwebMatch(item),
       ]);
       const title = mediaTitle(item);
       const year = mediaYear(item);
-      const filmwebUrl = exactFilmwebUrl;
+      const filmwebProviders = filmwebMatch && filmwebMatch.providers && filmwebMatch.providers.hasData
+        ? filmwebMatch.providers
+        : null;
 
       return {
         mediaType: item.media_type,
@@ -3042,9 +3037,9 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
         genres: genreNamesForItem(item, genreMaps),
         overview: item.overview || "",
         poster: imageUrl(item.poster_path || "", "w342"),
-        providers,
-        filmwebUrl,
-        filmwebLoading: false,
+        providers: filmwebProviders || tmdbProviders,
+        filmwebUrl: filmwebMatch && filmwebMatch.url ? filmwebMatch.url : "",
+        filmwebLoading: deferFilmweb,
         badge: extra.badge || null,
       };
     }
@@ -3060,7 +3055,7 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
         return enrichedSearchResultCache.get(cacheKey);
       }
 
-      const request = enrichCatalogItem(item, region);
+      const request = enrichCatalogItem(item, region, { deferFilmweb: true });
       enrichedSearchResultCache.set(cacheKey, request);
 
       return request;
@@ -3151,51 +3146,71 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
       };
     }
 
-    function loadFilmwebProviderData(item) {
-      if (!item || !item.id) {
-        return Promise.resolve(null);
+    function normalizeTmdbProviders(payload) {
+      const results = payload && payload.results && typeof payload.results === "object"
+        ? payload.results
+        : {};
+      const regionData = results[DEFAULT_REGION] || null;
+      const flatrate = regionData && Array.isArray(regionData.flatrate) ? regionData.flatrate : [];
+      const link = regionData && typeof regionData.link === "string" ? regionData.link : null;
+
+      const providers = flatrate
+        .filter((provider) => provider && provider.provider_name)
+        .map((provider) => ({
+          name: provider.provider_name,
+          logo: imageUrl(provider.logo_path || "", "w92") || "",
+          priority: Number.isFinite(provider.display_priority) ? provider.display_priority : 9999,
+          url: link || "",
+        }))
+        .sort((left, right) => {
+          if (left.priority !== right.priority) {
+            return left.priority - right.priority;
+          }
+
+          return left.name.localeCompare(right.name, "pl");
+        });
+
+      const groups = providers.length ? { Abonament: providers } : {};
+
+      return {
+        hasData: providers.length > 0,
+        loading: false,
+        link,
+        groups,
+        source: "tmdb",
+        attributionLabel: "JustWatch",
+        attributionUrl: link,
+      };
+    }
+
+    function loadTmdbProviderData(item) {
+      if (!item || !item.id || (item.media_type !== "movie" && item.media_type !== "tv")) {
+        return Promise.resolve(emptyProviderData("tmdb"));
       }
 
-      return resolveFilmwebMatch(item)
-        .then((match) => {
-          const filmwebId = Number(match && match.id);
+      const cacheKey = `${item.media_type}:${item.id}`;
 
-          if (!filmwebId) {
-            return null;
-          }
+      if (tmdbProviderDataCache.has(cacheKey)) {
+        return tmdbProviderDataCache.get(cacheKey);
+      }
 
-          if (match && match.providers) {
-            filmwebProviderDataCache.set(filmwebId, Promise.resolve(match.providers));
+      const request = tmdbRequest(`/${item.media_type}/${item.id}/watch/providers`, {})
+        .then((payload) => normalizeTmdbProviders(payload))
+        .catch(() => emptyProviderData("tmdb"));
 
-            return match.providers;
-          }
+      tmdbProviderDataCache.set(cacheKey, request);
 
-          if (filmwebProviderDataCache.has(filmwebId)) {
-            return filmwebProviderDataCache.get(filmwebId);
-          }
-
-          const request = filmwebRequest({
-            action: "providers",
-            id: String(filmwebId),
-          })
-            .then((payload) => normalizeFilmwebProviders(payload))
-            .catch(() => null);
-
-          filmwebProviderDataCache.set(filmwebId, request);
-
-          return request;
-        })
-        .catch(() => null);
+      return request;
     }
 
     async function resolveProviderData(item) {
-      const filmwebProviders = await loadFilmwebProviderData(item);
+      const tmdbProviders = await loadTmdbProviderData(item);
 
-      if (filmwebProviders && filmwebProviders.hasData) {
-        return filmwebProviders;
+      if (tmdbProviders && tmdbProviders.hasData) {
+        return tmdbProviders;
       }
 
-      return emptyProviderData("filmweb");
+      return emptyProviderData("tmdb");
     }
 
     function setHomeNewsToggleState(isExpanded, isLoading = false) {
@@ -4917,7 +4932,79 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
 
       return Promise.allSettled(
         pendingItems.map(({ item }) => enrichSearchResult(item, searchState.region))
-      ).then((results) => applySearchEnrichmentResults(searchState, pendingItems, results));
+      ).then((results) => {
+        const hasUpdates = applySearchEnrichmentResults(searchState, pendingItems, results);
+        scheduleFilmwebProviderUpgrade(searchState);
+
+        return hasUpdates;
+      });
+    }
+
+    function scheduleFilmwebProviderUpgrade(searchState) {
+      if (!searchState || activeSearchState !== searchState) {
+        return;
+      }
+
+      const visibleItems = searchVisibleItems(searchState);
+      const jobs = [];
+
+      visibleItems.forEach((item, index) => {
+        const rendered = searchState.renderedItems[index];
+
+        if (!rendered || rendered.providersUpgraded || rendered.providers?.loading) {
+          return;
+        }
+
+        rendered.providersUpgraded = true;
+
+        jobs.push(
+          resolveFilmwebMatch(item)
+            .then((match) => ({ index, match }))
+            .catch(() => null)
+        );
+      });
+
+      if (!jobs.length) {
+        return;
+      }
+
+      Promise.allSettled(jobs).then((results) => {
+        if (activeSearchState !== searchState) {
+          return;
+        }
+
+        let changed = false;
+
+        results.forEach((result) => {
+          if (result.status !== "fulfilled" || !result.value) {
+            return;
+          }
+
+          const { index, match } = result.value;
+          const current = searchState.renderedItems[index];
+
+          if (!current) {
+            return;
+          }
+
+          const filmwebProviders = match && match.providers && match.providers.hasData
+            ? match.providers
+            : null;
+
+          searchState.renderedItems[index] = {
+            ...current,
+            providers: filmwebProviders || current.providers,
+            filmwebUrl: match && match.url ? match.url : current.filmwebUrl,
+            filmwebLoading: false,
+            providersUpgraded: true,
+          };
+          changed = true;
+        });
+
+        if (changed) {
+          renderSearchState(searchState);
+        }
+      });
     }
 
     function renderActiveSearchResults(options = {}) {
