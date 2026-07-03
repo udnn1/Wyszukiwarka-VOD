@@ -2088,6 +2088,28 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
       "Player": "Player",
     };
 
+    const filmwebProviderLogos = {
+      "Netflix": "https://fwcdn.pl/vodp/2_5.1.svg",
+      "HBO Max": "https://fwcdn.pl/vodp/1_14.1.svg",
+      "Max": "https://fwcdn.pl/vodp/1_14.1.svg",
+      "Disney Plus": "https://fwcdn.pl/vodp/42_4.1.svg",
+      "Disney+": "https://fwcdn.pl/vodp/42_4.1.svg",
+      "Amazon Prime Video": "https://fwcdn.pl/vodp/8_3.1.svg",
+      "Prime Video": "https://fwcdn.pl/vodp/8_3.1.svg",
+      "Amazon Video": "https://fwcdn.pl/vodp/8_3.1.svg",
+      "Player": "https://fwcdn.pl/vodp/6_6.1.svg",
+      "Canal+": "https://fwcdn.pl/vodp/20_3.1.svg",
+      "CANAL+": "https://fwcdn.pl/vodp/20_3.1.svg",
+      "Canal+ Online": "https://fwcdn.pl/vodp/20_3.1.svg",
+      "SkyShowtime": "https://fwcdn.pl/vodp/44_3.1.svg",
+      "Apple TV Plus": "https://fwcdn.pl/vodp/10_2.1.svg",
+      "Apple TV+": "https://fwcdn.pl/vodp/10_2.1.svg",
+      "Polsat Box Go": "https://fwcdn.pl/vodp/34_6.1.svg",
+      "TVP VOD": "https://fwcdn.pl/vodp/7_8.1.svg",
+      "CDA Premium": "https://fwcdn.pl/vodp/65.1.svg",
+      "MEGOGO": "https://fwcdn.pl/vodp/50_4.1.svg",
+    };
+
     function providerDisplayName(name) {
       const label = String(name || "Nieznany serwis").trim();
 
@@ -3158,7 +3180,7 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
         .filter((provider) => provider && provider.provider_name)
         .map((provider) => ({
           name: provider.provider_name,
-          logo: imageUrl(provider.logo_path || "", "w92") || "",
+          logo: filmwebProviderLogos[provider.provider_name] || imageUrl(provider.logo_path || "", "w92") || "",
           priority: Number.isFinite(provider.display_priority) ? provider.display_priority : 9999,
           url: link || "",
         }))
@@ -4889,31 +4911,41 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
       });
     }
 
-    function applySearchEnrichmentResults(searchState, pendingItems, results) {
-      let hasUpdates = false;
+    function applySearchEnrichmentValue(searchState, targetIndex, value) {
+      if (!value) {
+        const existingItem = searchState.renderedItems[targetIndex];
 
-      results.forEach((result, index) => {
-        const targetIndex = pendingItems[index].index;
+        if (existingItem && existingItem.providers?.loading) {
+          searchState.renderedItems[targetIndex] = {
+            ...existingItem,
+            providers: emptyProviderData("tmdb"),
+          };
 
-        if (result.status !== "fulfilled" || !result.value) {
-          const existingItem = searchState.renderedItems[targetIndex];
-
-          if (existingItem && existingItem.providers?.loading) {
-            searchState.renderedItems[targetIndex] = {
-              ...existingItem,
-              providers: emptyProviderData("filmweb"),
-            };
-            hasUpdates = true;
-          }
-
-          return;
+          return true;
         }
 
-        searchState.renderedItems[targetIndex] = result.value;
-        hasUpdates = true;
-      });
+        return false;
+      }
 
-      return hasUpdates;
+      searchState.renderedItems[targetIndex] = value;
+
+      return true;
+    }
+
+    function scheduleSearchRender(searchState) {
+      if (searchState.renderScheduled) {
+        return;
+      }
+
+      searchState.renderScheduled = true;
+
+      requestAnimationFrame(() => {
+        searchState.renderScheduled = false;
+
+        if (activeSearchState === searchState) {
+          renderSearchState(searchState);
+        }
+      });
     }
 
     function enrichVisibleSearchItems(searchState) {
@@ -4930,13 +4962,25 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
         return Promise.resolve(false);
       }
 
-      return Promise.allSettled(
-        pendingItems.map(({ item }) => enrichSearchResult(item, searchState.region))
-      ).then((results) => {
-        const hasUpdates = applySearchEnrichmentResults(searchState, pendingItems, results);
+      const perItem = pendingItems.map(({ item, index }) =>
+        enrichSearchResult(item, searchState.region)
+          .then(
+            (value) => activeSearchState === searchState && applySearchEnrichmentValue(searchState, index, value),
+            () => activeSearchState === searchState && applySearchEnrichmentValue(searchState, index, null)
+          )
+          .then((applied) => {
+            if (applied) {
+              scheduleSearchRender(searchState);
+            }
+
+            return applied === true;
+          })
+      );
+
+      return Promise.allSettled(perItem).then((results) => {
         scheduleFilmwebProviderUpgrade(searchState);
 
-        return hasUpdates;
+        return results.some((result) => result.status === "fulfilled" && result.value === true);
       });
     }
 
@@ -5231,6 +5275,8 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
       }
 
       searchOperationId = operationId;
+
+      loadGenreMaps().catch(() => {});
 
       setMessage("", "");
       setStatus("Ładowanie wyników", { loading: true });
