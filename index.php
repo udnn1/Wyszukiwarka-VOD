@@ -2241,16 +2241,7 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
         .filter(Boolean);
     }
 
-    function translationTitle(entry, mediaType) {
-      if (!entry || typeof entry !== "object" || !entry.data || typeof entry.data !== "object") {
-        return "";
-      }
-
-      return mediaType === "movie"
-        ? (entry.data.title || "")
-        : (entry.data.name || "");
-    }
-
+    
     function sortByEarliestRelease(left, right) {
       const leftTime = Date.parse(mediaReleaseDate(left) || "9999-12-31");
       const rightTime = Date.parse(mediaReleaseDate(right) || "9999-12-31");
@@ -2271,25 +2262,8 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
         .trim();
     }
 
-    function isReadablePolishTitle(value) {
-      const title = String(value || "").trim();
-
-      if (!title) {
-        return false;
-      }
-
-      return /^[\p{Script=Latin}\p{Mark}\d\s"'.,:;!?()[\]\/&+\-%]+$/u.test(title);
-    }
-
-    function readableTitleCandidates(item) {
-      return Array.from(new Set([
-        item.title,
-        item.name,
-        item.original_title,
-        item.original_name,
-      ].filter(Boolean).map((title) => String(title).trim()).filter(Boolean)));
-    }
-
+    
+    
     async function loadGenreMaps() {
       if (genreMapsPromise) {
         return genreMapsPromise;
