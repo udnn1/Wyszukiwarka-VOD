@@ -43,6 +43,51 @@ function filmwebHeaders(array $extraHeaders = []): array
     ], $extraHeaders);
 }
 
+function filmwebShareHandle(): ?CurlShareHandle
+{
+    static $share = null;
+
+    if ($share === false) {
+        return null;
+    }
+
+    if ($share === null) {
+        if (!function_exists('curl_share_init')) {
+            $share = false;
+
+            return null;
+        }
+
+        $share = curl_share_init();
+
+        curl_share_setopt($share, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
+        curl_share_setopt($share, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
+        curl_share_setopt($share, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
+    }
+
+    return $share;
+}
+
+function filmwebCurlBaseOptions(array $headers): array
+{
+    $options = [
+        CURLOPT_HTTPGET => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_TIMEOUT => 20,
+        CURLOPT_TCP_KEEPALIVE => 1,
+        CURLOPT_HTTPHEADER => $headers,
+    ];
+
+    $share = filmwebShareHandle();
+
+    if ($share !== null) {
+        $options[CURLOPT_SHARE] = $share;
+    }
+
+    return $options;
+}
+
 function filmwebRequest(string $path, array $query = [], array $extraHeaders = []): array
 {
     $url = FILMWEB_API_BASE . $path;
@@ -57,13 +102,7 @@ function filmwebRequest(string $path, array $query = [], array $extraHeaders = [
     if (function_exists('curl_init')) {
         $curlHandle = curl_init($url);
 
-        curl_setopt_array($curlHandle, [
-            CURLOPT_HTTPGET => true,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => false,
-            CURLOPT_TIMEOUT => 20,
-            CURLOPT_HTTPHEADER => $headers,
-        ]);
+        curl_setopt_array($curlHandle, filmwebCurlBaseOptions($headers));
 
         $body = curl_exec($curlHandle);
 
@@ -1116,13 +1155,7 @@ function filmwebGetMultiOnce(array $urls): array
     foreach ($urls as $key => $url) {
         $handle = curl_init($url);
 
-        curl_setopt_array($handle, [
-            CURLOPT_HTTPGET => true,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => false,
-            CURLOPT_TIMEOUT => 20,
-            CURLOPT_HTTPHEADER => $headers,
-        ]);
+        curl_setopt_array($handle, filmwebCurlBaseOptions($headers));
 
         curl_multi_add_handle($multiHandle, $handle);
         $handles[$key] = $handle;
