@@ -1775,7 +1775,7 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
 <body>
   <main class="shell">
     <section class="hero">
-      <h1>Na jakim VOD to jest?</h1>
+      <h1 id="site-title" style="cursor: pointer;">Na jakim VOD to jest?</h1>
 
       <form id="search-form" class="search-panel">
         <div class="search-grid">
@@ -5380,6 +5380,8 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
     listen(queryInput, "input", hidePanelsForSearchIntent);
 
     listen(clearResultsButton, "click", () => clearResults(true));
+
+    listen(document.getElementById("site-title"), "click", () => clearResults(true));
 
     listen(toggleRandomPanelButton, "click", () => {
       const expanded = toggleRandomPanelButton.getAttribute("aria-expanded") === "true";
