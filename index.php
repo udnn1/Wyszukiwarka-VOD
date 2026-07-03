@@ -4995,11 +4995,9 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
       visibleItems.forEach((item, index) => {
         const rendered = searchState.renderedItems[index];
 
-        if (!rendered || rendered.providersUpgraded || rendered.providers?.loading) {
+        if (!rendered || rendered.providers?.loading || rendered.filmwebLoading === false) {
           return;
         }
-
-        rendered.providersUpgraded = true;
 
         jobs.push(
           resolveFilmwebMatch(item)
@@ -5040,7 +5038,6 @@ $faviconHref = 'data:image/svg+xml,' . rawurlencode($faviconSvg);
             providers: filmwebProviders || current.providers,
             filmwebUrl: match && match.url ? match.url : current.filmwebUrl,
             filmwebLoading: false,
-            providersUpgraded: true,
           };
           changed = true;
         });
