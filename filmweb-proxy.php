@@ -1712,7 +1712,7 @@ function providersPayloadForTitle(int $id, ?array $titleInfo = null): array
     }
 
     $lists = filmwebGetMulti([
-        'offers' => FILMWEB_API_BASE . '/vod/' . $type . '/' . $id . '/providers/list',
+        'offers' => FILMWEB_API_BASE . '/vod/film/' . $id . '/providers/list',
         'providers' => FILMWEB_API_BASE . '/vod/providers/list',
     ]);
 
